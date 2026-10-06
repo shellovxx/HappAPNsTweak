@@ -14,11 +14,12 @@ extern void *dlopen(const char *, int);
 static void (*originalInclude)(Object, Selector, Boolean);
 static void (*originalExclude)(Object, Selector, Boolean);
 static void (*originalLocal)(Object, Selector, Boolean);
+static void (*originalEnforce)(Object, Selector, Boolean);
 static void (*originalSave)(Object, Selector, Object);
 
 static void setInclude(Object self, Selector selector, Boolean requested) {
     (void)requested;
-    originalInclude(self, selector, 1);
+    originalInclude(self, selector, 0);
 }
 
 static void setExclude(Object self, Selector selector, Boolean requested) {
@@ -31,13 +32,20 @@ static void setLocal(Object self, Selector selector, Boolean requested) {
     originalLocal(self, selector, 1);
 }
 
+static void setEnforce(Object self, Selector selector, Boolean requested) {
+    (void)requested;
+    originalEnforce(self, selector, 0);
+}
+
 static void savePreferences(Object self, Selector selector, Object completion) {
     Object protocol = ((Object (*)(Object, Selector))objc_msgSend)(
         self, sel_registerName("protocolConfiguration"));
 
     if (protocol) {
         ((void (*)(Object, Selector, Boolean))objc_msgSend)(
-            protocol, sel_registerName("setIncludeAllNetworks:"), 1);
+            protocol, sel_registerName("setIncludeAllNetworks:"), 0);
+        ((void (*)(Object, Selector, Boolean))objc_msgSend)(
+            protocol, sel_registerName("setEnforceRoutes:"), 0);
         ((void (*)(Object, Selector, Boolean))objc_msgSend)(
             protocol, sel_registerName("setExcludeAPNs:"), 0);
         ((void (*)(Object, Selector, Boolean))objc_msgSend)(
@@ -60,8 +68,10 @@ __attribute__((constructor)) static void installHooks(void) {
         protocolClass, sel_registerName("setExcludeLocalNetworks:"));
     Method save = class_getInstanceMethod(
         managerClass, sel_registerName("saveToPreferencesWithCompletionHandler:"));
+    Method enforce = class_getInstanceMethod(
+        protocolClass, sel_registerName("setEnforceRoutes:"));
 
-    if (!include || !exclude || !local || !save)
+    if (!include || !exclude || !local || !save || !enforce)
         return;
 
     originalInclude = (void (*)(Object, Selector, Boolean))
@@ -70,6 +80,8 @@ __attribute__((constructor)) static void installHooks(void) {
         method_setImplementation(exclude, (Implementation)setExclude);
     originalLocal = (void (*)(Object, Selector, Boolean))
         method_setImplementation(local, (Implementation)setLocal);
+    originalEnforce = (void (*)(Object, Selector, Boolean))
+        method_setImplementation(enforce, (Implementation)setEnforce);
     originalSave = (void (*)(Object, Selector, Object))
         method_setImplementation(save, (Implementation)savePreferences);
 }

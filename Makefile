@@ -1,11 +1,11 @@
-ARCHS = arm64
+ARCHS = arm64 arm64e
 TARGET = iphone:clang:latest:16.4
 THEOS_PACKAGE_SCHEME = rootless
 FINALPACKAGE = 1
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = HappVPNPushRoute HappAPNsDNS
+TWEAK_NAME = HappVPNPushRoute HappAPNsDNS HappAPNsScope
 
 HappVPNPushRoute_FILES = HappVPNPushRoute.c
 HappVPNPushRoute_LIBRARIES = objc
@@ -18,5 +18,10 @@ HappAPNsDNS_LIBRARIES = objc
 HappAPNsDNS_FRAMEWORKS = NetworkExtension
 HappAPNsDNS_CFLAGS = -O2 -fno-builtin
 HappAPNsDNS_LDFLAGS = -Wl,-headerpad,0x1000
+
+HappAPNsScope_FILES = HappAPNsScope.c
+HappAPNsScope_CFLAGS = -O2 -fno-builtin -Wall -Wextra -Werror
+HappAPNsScope_FRAMEWORKS = Network SystemConfiguration
+HappAPNsScope_LDFLAGS = -Wl,-headerpad,0x1000
 
 include $(THEOS_MAKE_PATH)/tweak.mk

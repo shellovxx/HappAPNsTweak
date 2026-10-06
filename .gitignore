@@ -1,6 +1,9 @@
 .theos/
+work/
 packages/
 *.dylib
 *.deb
 *.o
 *.dSYM/
+__pycache__/
+*.pyc
