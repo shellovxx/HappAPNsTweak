@@ -1,0 +1,8 @@
+Package: local.happvpnpushroute
+Name: Happ VPN Push Route
+Version: 1.2.0
+Architecture: iphoneos-arm64
+Maintainer: Local device customization
+Depends: ellekit, firmware (>= 16.4)
+Section: Tweaks
+Description: VPN profile and tunnel DNS hooks for Happ.
