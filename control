@@ -1,8 +1,8 @@
 Package: local.happvpnpushroute
-Name: Happ VPN Push Route
-Version: 1.4.0
-Architecture: iphoneos-arm64
+Name: Happ APNs Tweak
+Version: 1.5.0
+Architecture: iphoneos-arm64e
 Maintainer: Local device customization
-Depends: ellekit, firmware (>= 16.4)
+Depends: ellekit, roothide (>= 0.1.0), firmware (>= 16.4)
 Section: Tweaks
 Description: Preserve hotspot DHCP and scope apsd push connections to the active VPN without enforcing global routes.

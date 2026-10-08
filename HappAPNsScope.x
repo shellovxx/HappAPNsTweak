@@ -10,9 +10,7 @@ extern void *dlsym(void *, const char *);
 extern const char *getprogname(void);
 extern int strcmp(const char *, const char *);
 extern unsigned if_nametoindex(const char *);
-extern void syslog(int, const char *, ...);
 
-static Object (*originalCreate)(Object, Object);
 static unsigned short (*endpointPort)(Object);
 static const char *(*endpointHost)(Object);
 static Object (*interfaceCreate)(UInt);
@@ -98,37 +96,37 @@ static UInt activeTunnel(void) {
     return matches == 1 ? selected : 0;
 }
 
-static Object createConnection(Object endpoint, Object parameters) {
+%config(generator=MobileSubstrate);
+%group APNsScope
+%hookf(Object, nw_connection_create, Object endpoint, Object parameters) {
     if (!endpoint || !parameters || !apns_endpoint(endpointPort(endpoint), endpointHost(endpoint)))
-        return originalCreate(endpoint, parameters);
+        return %orig(endpoint, parameters);
     UInt index = activeTunnel();
-    if (!index) return originalCreate(endpoint, parameters);
+    if (!index) return %orig(endpoint, parameters);
     Object interface = interfaceCreate(index);
     Object copy = interface ? parametersCopy(parameters) : 0;
     if (!copy) {
         if (interface) networkRelease(interface);
-        return originalCreate(endpoint, parameters);
+        return %orig(endpoint, parameters);
     }
     /* Remove apsd's physical-interface/source restriction on this copy only. */
     requireType(copy, 0);
     setLocalEndpoint(copy, 0);
     requireInterface(copy, interface);
-    Object connection = originalCreate(endpoint, copy);
+    Object connection = %orig(endpoint, copy);
     networkRelease(copy);
     networkRelease(interface);
-    syslog(5, "[HappAPNsScope] APNs connection port=%u VPN interface=%u", endpointPort(endpoint), index);
     return connection;
 }
 
-__attribute__((constructor)) static void install(void) {
+%end
+
+%ctor {
     const char *name = getprogname();
     if (!name || strcmp(name, "apsd")) return;
     dlopen("/System/Library/Frameworks/Network.framework/Network", 2);
     dlopen("/System/Library/Frameworks/SystemConfiguration.framework/SystemConfiguration", 2);
-    void *lib = dlopen("/var/jb/usr/lib/libellekit.dylib", 2);
-    void (*hook)(Object, Object, Object *) = lib ? dlsym(lib, "MSHookFunction") : 0;
-    if (!hook) return;
-#define LOAD(variable, symbol) do { variable = dlsym((Object)-2, symbol); if (!variable) { syslog(5, "[HappAPNsScope] unavailable API: %s", symbol); return; } } while (0)
+#define LOAD(variable, symbol) do { variable = dlsym((Object)-2, symbol); if (!variable) return; } while (0)
     LOAD(endpointPort, "nw_endpoint_get_port"); LOAD(endpointHost, "nw_endpoint_get_hostname");
     LOAD(interfaceCreate, "nw_interface_create_with_index"); LOAD(parametersCopy, "nw_parameters_copy");
     LOAD(requireInterface, "nw_parameters_require_interface"); LOAD(requireType, "nw_parameters_set_required_interface_type");
@@ -143,7 +141,6 @@ __attribute__((constructor)) static void install(void) {
 #undef LOAD
     Object target = dlsym((Object)-2, "nw_connection_create");
     if (target) {
-        hook(target, (Object)createConnection, (Object *)&originalCreate);
-        if (originalCreate) syslog(5, "[HappAPNsScope] installed in apsd");
+        %init(APNsScope, nw_connection_create=target);
     }
 }

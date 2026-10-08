@@ -1,31 +1,32 @@
-# HappAPNsTweak
+# Happ APNs Tweak — RootHide
 
-Версия 1.4.0 для Happ, rootless iOS и ElleKit. Проверена на iPhone 11 Pro Max с iOS 16.6.1. Раздача получает рабочий DHCP, а соединение APNs направляется через активный VPN.
+Версия **1.5.0**, архитектура пакета `iphoneos-arm64e`. Собраны подписанные arm64 и современные arm64e PAC00 slices. Проверено на iPhone 11 Pro Max, iOS 16.6.1, Relaxin / RootHide / ElleKit.
 
-`HappVPNPushRoute.c` устанавливает `includeAllNetworks=false`, `enforceRoutes=false`, `excludeAPNs=false`, `excludeLocalNetworks=true`, в том числе при сохранении профиля. Обычные маршруты Happ сохраняются. Режим блокировки всех сетей выключен: приложения, явно выбравшие физический интерфейс, больше не принуждаются этим флагом идти через VPN.
+Три модуля используют Logos с генератором MobileSubstrate; установленный ElleKit выполняет хуки. Диагностические логи из модулей удалены, сборка использует `FINALPACKAGE=1 DEBUG=0`.
 
-`HappAPNsScope.c` загружается только в `apsd` и перехватывает `nw_connection_create`. Для APNs-соединения создаётся отдельная копия параметров Network.framework; с неё снимается ограничение на физический интерфейс и исходный адрес, затем требуется интерфейс активного VPN. Параметры других соединений не изменяются. Маршрут `17.0.0.0/8` не добавляется.
+- `HappVPNPushRoute.xm` задаёт флаги профиля: `includeAllNetworks=false`, `enforceRoutes=false`, `excludeAPNs=false`, `excludeLocalNetworks=true`, включая сохранение профиля.
+- `HappAPNsDNS.xm` преобразует DoH-настройки туннеля в обычные DNS-настройки с теми же серверами, доменами и `matchDomainsNoSearch`.
+- `HappAPNsScope.x` загружается только в `apsd`. Хук `nw_connection_create` копирует параметры APNs-соединения, снимает ограничение на физический интерфейс и требует текущий интерфейс VPN. Другие соединения сохраняют исходные параметры.
 
-APNs определяется по двум условиям: процесс — `apsd`, порт — TCP 5223. Для TCP 443 дополнительно требуется домен `push.apple.com` или его поддомен; IP-адрес на порту 443 сам по себе не считается APNs. Поэтому запросы настройки службы, iCloud, App Store и другие HTTPS-соединения не получают такую привязку. Проверка имени учитывает регистр, границу домена и завершающую точку. Основной канал 5223 проверен на устройстве; принудительное использование fallback 443 отдельно не проверено.
+APNs определяется по TCP 5223; на TCP 443 дополнительно требуется имя `push.apple.com` или его поддомен. Номер utun и UUID не зашиты: интерфейс выбирается из SCDynamicStore при создании соединения. Если подходящий VPN отсутствует, их несколько или частный API недоступен, исходные параметры сохраняются. Маршрут `17.0.0.0/8` не добавляется. Полная блокировка физической сети выключена.
 
-Интерфейс определяется при каждом создании соединения по `SCDynamicStore`: единственная IPv4-служба VPN с живым `utun` и состоянием `Status=7`, наблюдавшимся при подключении на iOS 16.6.1. Номер `utun` и UUID не зашиты. Если службы нет, их несколько или необходимый API отсутствует, сохраняются исходные параметры соединения. Состояние 7 относится к динамическому хранилищу VPN, а не к перечислению `SCNetworkConnectionGetStatus`. Реализация использует частный API создания `nw_interface`; совместимость с другими версиями iOS не подтверждена.
+Установите `.deb` из Releases через менеджер пакетов RootHide. Требуются ElleKit, RootHide ≥ 0.1.0 и iOS ≥ 16.4. После установки перезапустите Happ и `apsd`, затем переподключите VPN. Для раздачи нужны отдельные HotspotVPN и HotspotVPN DNS из [соседнего проекта](https://github.com/shellovxx/HotSpotVPN).
 
-`HappAPNsDNS.c` сохраняет прежнее преобразование DNS-настроек Happ. В установленном пакете библиотека DNS побайтно совпадает с резервной копией версии 1.2.0. HotspotVPN и его DNS-дополнение не менялись.
-
-Сборка с совместимым Apple/Procursus clang и [Theos](https://theos.dev/docs/installation):
-
-```sh
-make clean package
-```
-
-Системному `apsd` на проверенном A12+ устройстве нужна подписанная arm64e PAC00 slice. Обычная arm64-сборка, работающая внутри приложения Happ, туда не загружалась. Проверенная нативная сборка использовала Procursus clang 16.0.0 и ld64 951.9. Упаковка уже подписанных библиотек с проверкой архитектуры:
+Сборка использует [RootHide Theos](https://github.com/roothide/theos), SDK iOS 16.5 и совместимый с современным arm64e ABI Apple/Procursus clang:
 
 ```sh
-python scripts/package.py --binaries /path/to/binaries --output packages/HappVPNPushRoute_1.4.0_iphoneos-arm64.deb
+make clean package FINALPACKAGE=1 DEBUG=0
+# Альтернатива: clang, ld, lipo и ldid доступны в PATH
+THEOS=/path/to/roothide-theos HAPP_SDK=/path/to/iPhoneOS16.5.sdk sh scripts/build-native.sh
 ```
 
-Проверка границ выбора APNs: `tests/endpoint_test.c` — 17 случаев, включая посторонние HTTPS-домены и DHCP-порты. Пакеты и результаты сборки исключены из Git.
+Для ручной упаковки подписанных библиотек:
 
-После установки перезапустите Happ и `apsd`, затем переподключите VPN. Проверки на устройстве и история неудачной версии 1.3.0 описаны в [diagnosis-hotspot.md](diagnosis-hotspot.md).
+```sh
+python3 scripts/package.py --binaries /path/to/binaries --output packages/local.happvpnpushroute_1.5.0_iphoneos-arm64e.deb
+cc tests/endpoint_test.c -o /tmp/happ-endpoint-test && /tmp/happ-endpoint-test
+```
 
-Основания: [описание includeAllNetworks у Apple](https://developer.apple.com/documentation/networkextension/nevpnprotocol/includeallnetworks) и [порты APNs у Apple](https://support.apple.com/en-ie/102266). Документация обещает исключение DHCP из полного туннеля; на данной конфигурации захват запросов и сравнение режимов показали несовместимость, но точный участок отбрасывания пакетов внутри системы не установлен.
+Проверенная сборка использовала Procursus clang 16.0.0 и ld64 951.9. Упаковщик проверяет сигнатуры, PAC00 для системного `apsd`, загрузку Substrate через `.jbroot` и отсутствие старых путей `/var/jb/`. SDK, инструменты, пакеты и приватные данные исключены из Git.
+
+В [проверке RootHide](verification-roothide.md) приведены фактические результаты. История предыдущей rootless-версии сохранена отдельно в [diagnosis-hotspot.md](diagnosis-hotspot.md). Доставка конкретного уведомления и специально вызванный fallback 443 отдельно не подтверждены.

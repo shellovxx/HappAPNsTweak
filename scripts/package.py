@@ -79,7 +79,11 @@ def main():
         archs = slices(binary)
         if name == "HappAPNsScope" and (0x0100000C, 0x80000002) not in archs:
             raise ValueError("apsd on the tested A12+ iPhone requires arm64e PAC00")
-        prefix = "./var/jb/Library/MobileSubstrate/DynamicLibraries/" + name
+        if b"/var/jb/" in binary:
+            raise ValueError("legacy rootless path in RootHide dylib")
+        if b"@loader_path/.jbroot/usr/lib/libsubstrate.dylib" not in binary:
+            raise ValueError("missing RootHide substrate load path")
+        prefix = "./Library/MobileSubstrate/DynamicLibraries/" + name
         data.extend([(prefix + ".dylib", binary, 0o755),
                      (prefix + ".plist", (ROOT / (name + ".plist")).read_bytes(), 0o644)])
     members = [("debian-binary", b"2.0\n"),
